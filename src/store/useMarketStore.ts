@@ -1,8 +1,22 @@
 import { create } from 'zustand'
 import type { StockData, FilterState, SortKey, MarketOverview } from '../utils/types'
 import { fetchMultipleQuotes, didUseFallback, resetFallbackFlag } from '../api/finnhub'
-import { SP500_SYMBOLS, SP500_LIST, SP500_BY_SECTOR } from '../constants/sp500'
+import { generateMockStockData } from '../api/mockData'
+import { SP500_SYMBOLS, SP500_LIST } from '../constants/sp500'
 import { API_CONFIG, MARKET_CONFIG } from '../constants/config'
+
+export interface QuoteData {
+  symbol: string
+  price: number
+  change: number
+  changePercent: number
+  dayHigh: number
+  dayLow: number
+  open: number
+  previousClose: number
+  volume: number
+  timestamp: number
+}
 
 type DataSource = 'live' | 'mock' | 'fallback'
 
@@ -15,8 +29,12 @@ interface MarketStore {
   filter: FilterState
   marketOverview: MarketOverview | null
   dataSource: DataSource
+  liveCount: number
 
   fetchStocks: () => Promise<void>
+  seedMockData: () => void
+  applyQuoteUpdate: (quote: QuoteData) => void
+  updateRealtimePrice: (symbol: string, price: number, volume: number, timestamp: number) => void
   setSearch: (search: string) => void
   setSector: (sector: string) => void
   setSortBy: (sortBy: SortKey) => void
@@ -41,6 +59,23 @@ const defaultFilter: FilterState = {
   performance: 'all',
 }
 
+function recalcMarketOverview(stocks: StockData[]): MarketOverview {
+  const advancing = stocks.filter(s => s.change > 0).length
+  const declining = stocks.filter(s => s.change < 0).length
+  const unchanged = stocks.length - advancing - declining
+  const totalVolume = stocks.reduce((sum, s) => sum + s.volume, 0)
+  return {
+    totalAdvancing: advancing,
+    totalDeclining: declining,
+    totalUnchanged: unchanged,
+    advDecRatio: advancing / (declining || 1),
+    totalVolume,
+    marketSentiment: advancing > declining ? 'bullish' : advancing < declining ? 'bearish' : 'neutral',
+  }
+}
+
+const _liveSymbolsSet = new Set<string>()
+
 export const useMarketStore = create<MarketStore>((set, get) => ({
   stocks: [],
   filteredStocks: [],
@@ -50,6 +85,7 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
   filter: defaultFilter,
   marketOverview: null,
   dataSource: API_CONFIG.USE_MOCK ? 'mock' : 'live',
+  liveCount: 0,
 
   fetchStocks: async () => {
     set({ loading: true, error: null })
@@ -58,26 +94,73 @@ export const useMarketStore = create<MarketStore>((set, get) => ({
       const stocks = await fetchMultipleQuotes(SP500_SYMBOLS)
       const fellBack = didUseFallback()
       const dataSource = API_CONFIG.USE_MOCK ? 'mock' : fellBack ? 'fallback' : 'live'
-
-      const advancing = stocks.filter(s => s.change > 0).length
-      const declining = stocks.filter(s => s.change < 0).length
-      const unchanged = stocks.length - advancing - declining
-      const totalVolume = stocks.reduce((sum, s) => sum + s.volume, 0)
-
-      const marketOverview: MarketOverview = {
-        totalAdvancing: advancing,
-        totalDeclining: declining,
-        totalUnchanged: unchanged,
-        advDecRatio: advancing / (declining || 1),
-        totalVolume,
-        marketSentiment: advancing > declining ? 'bullish' : advancing < declining ? 'bearish' : 'neutral',
-      }
-
+      const marketOverview = recalcMarketOverview(stocks)
       set({ stocks, loading: false, lastUpdated: Date.now(), marketOverview, dataSource })
       get().applyFilters()
     } catch {
       set({ error: 'Failed to fetch market data', loading: false })
     }
+  },
+
+  seedMockData: () => {
+    const stocks = SP500_SYMBOLS.map(s => generateMockStockData(s))
+    const marketOverview = recalcMarketOverview(stocks)
+    set({ stocks, loading: false, lastUpdated: Date.now(), marketOverview })
+    get().applyFilters()
+  },
+
+  applyQuoteUpdate: (quote: QuoteData) => {
+    let liveCount = get().liveCount
+    if (!_liveSymbolsSet.has(quote.symbol)) {
+      _liveSymbolsSet.add(quote.symbol)
+      liveCount++
+    }
+
+    set(state => {
+      const stocks = state.stocks.map(s => {
+        if (s.symbol !== quote.symbol) return s
+        return {
+          ...s,
+          price: quote.price,
+          change: quote.change,
+          changePercent: quote.changePercent,
+          dayHigh: quote.dayHigh,
+          dayLow: quote.dayLow,
+          open: quote.open,
+          previousClose: quote.previousClose,
+          volume: quote.volume,
+          timestamp: quote.timestamp,
+        }
+      })
+      const marketOverview = recalcMarketOverview(stocks)
+      const dataSource: DataSource = API_CONFIG.USE_MOCK ? 'mock' : liveCount > 0 ? 'live' : 'fallback'
+      return { stocks, liveCount, marketOverview, dataSource, lastUpdated: Date.now() }
+    })
+    get().applyFilters()
+  },
+
+  updateRealtimePrice: (symbol: string, tradePrice: number, tradeVolume: number, timestamp: number) => {
+    set(state => {
+      const stocks = state.stocks.map(s => {
+        if (s.symbol !== symbol) return s
+        const previousClose = s.previousClose || s.price
+        const change = tradePrice - previousClose
+        const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0
+        return {
+          ...s,
+          price: tradePrice,
+          change,
+          changePercent,
+          volume: tradeVolume,
+          dayHigh: Math.max(s.dayHigh, tradePrice),
+          dayLow: s.dayLow > 0 ? Math.min(s.dayLow, tradePrice) : tradePrice,
+          timestamp,
+        }
+      })
+      const marketOverview = recalcMarketOverview(stocks)
+      return { stocks, marketOverview, lastUpdated: Date.now() }
+    })
+    get().applyFilters()
   },
 
   setSearch: (search: string) => {

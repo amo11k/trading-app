@@ -129,6 +129,40 @@ export async function fetchNews(symbol: string, from: string, to: string): Promi
   }
 }
 
+export async function fetchQuoteOnly(symbol: string): Promise<QuoteData | null> {
+  try {
+    const data = await fetchWithCache<FinnhubQuote>(`/quote`, { symbol })
+    return {
+      symbol,
+      price: data.c,
+      change: data.d,
+      changePercent: data.dp,
+      dayHigh: data.h,
+      dayLow: data.l,
+      open: data.o,
+      previousClose: data.pc,
+      volume: data.v,
+      timestamp: Math.floor(Date.now() / 1000),
+    }
+  } catch {
+    _usedFallback = true
+    return null
+  }
+}
+
+export interface QuoteData {
+  symbol: string
+  price: number
+  change: number
+  changePercent: number
+  dayHigh: number
+  dayLow: number
+  open: number
+  previousClose: number
+  volume: number
+  timestamp: number
+}
+
 export async function fetchMultipleQuotes(symbols: string[]): Promise<StockData[]> {
   const results = await Promise.allSettled(symbols.map(s => fetchQuote(s)))
   return results

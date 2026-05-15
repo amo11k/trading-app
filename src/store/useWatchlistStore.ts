@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'JNJ', 'KO', 'JPM']
+
 interface WatchlistStore {
   symbols: string[]
   addSymbol: (symbol: string) => void
@@ -8,12 +10,14 @@ interface WatchlistStore {
   toggleSymbol: (symbol: string) => void
   isWatched: (symbol: string) => boolean
   clearAll: () => void
+  hasBeenInitialized: boolean
 }
 
 export const useWatchlistStore = create<WatchlistStore>()(
   persist(
     (set, get) => ({
-      symbols: [],
+      symbols: DEFAULT_SYMBOLS,
+      hasBeenInitialized: true,
 
       addSymbol: (symbol: string) => {
         set(state => ({
