@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-market-border;
+  }
+
+  body {
+    @apply bg-market-bg text-market-text font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  :root {
+    --color-up: #22c55e;
+    --color-down: #ef4444;
+    --chart-grid: #1e2025;
+  }
+
+  .dark {
+    color-scheme: dark;
+  }
+
+  .light {
+    color-scheme: light;
+    --color-up: #16a34a;
+    --color-down: #dc2626;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-market-bg;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-market-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-market-surface border border-market-border rounded-lg p-4 transition-colors duration-200;
+  }
+
+  .card-hover {
+    @apply card hover:bg-market-hover cursor-pointer;
+  }
+
+  .table-header {
+    @apply text-xs font-medium text-market-text-secondary uppercase tracking-wider px-3 py-3 text-left;
+  }
+
+  .table-cell {
+    @apply px-3 py-3 text-sm whitespace-nowrap;
+  }
+
+  .price-up {
+    @apply text-market-up;
+  }
+
+  .price-down {
+    @apply text-market-down;
+  }
+
+  .glass {
+    @apply bg-market-surface/80 backdrop-blur-sm;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-market-accent to-purple-500 bg-clip-text text-transparent;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
